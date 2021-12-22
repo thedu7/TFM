@@ -1,0 +1,1342 @@
+---
+title: "Anàlisi i predicció dels moviments de gentrificació a la ciutat de Paris."
+author: "Eduard Ruiz Sole"
+date: "Gener 2022"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  word_document:
+    toc: yes
+    toc_depth: '2'
+---
+
+*****
+# 0.Preparació de les dades
+*****
+
+Importem la base de dades d'INSEE (https://www.insee.fr/fr/statistiques/5359146#consulter), un fitxer csv de 172Mb.
+
+```{r message= FALSE, warning=FALSE}
+# Càrrega de les dades
+setwd("/Users/eduardruiz/Downloads/Dades Master/INSEE/dossier_complet/")
+data <- read.csv("dossier_complet.csv", sep=";", dec = ".", header = TRUE)
+```
+
+El dataframe té 35010 observacions i 1891 variables.
+
+```{r message= FALSE, warning=FALSE}
+# Dimensions del dataset
+dim(data)
+```
+
+Nosaltres volem aquelles dades que afecten la petita corona de la regió Parisina. Així doncs, sel·leccionarem les dades pels departaments 75, 92, 93 i 94, mitjançant la variable 'CODGEO'.
+
+```{r message= FALSE, warning=FALSE}
+# Transformació de la variable "CODGEO" a tipus 'numeric'
+data$CODGEO <- as.numeric(as.character(data$CODGEO))
+# Filtrem aquells departaments que ens interessen
+dataPC <- data[ which((data$CODGEO >= 75000 & data$CODGEO <= 75999) | (data$CODGEO >= 92000 & data$CODGEO <= 94999) ), ]
+
+# Dimensions del dataset
+dim(dataPC)
+```
+
+El dataframe resultant conté 144 observacions, és a dir, ciutats i 1891 variables.
+Tot seguitm importem de la base de dades d'INSEE, el fitxer amb les metadades, ja que necessitem la variable 'LIB_MOD' per saber els noms de cada ciutat.
+
+```{r message= FALSE, warning=FALSE}
+# Càrrega de les dades
+setwd("/Users/eduardruiz/Downloads/Dades Master/INSEE/dossier_complet/")
+meta_data <- read.csv("meta_dossier_complet.csv", sep=";", dec = ".", header = TRUE)
+```
+
+Realitzem un merge entre les dues taules, metadades i dades, per obtenir un dataframe complet.
+
+```{r message= FALSE, warning=FALSE}
+# Merge de dues taules
+taula_dades <- merge(x = dataPC, y = meta_data, by.x = "CODGEO", by.y = "COD_MOD")
+```
+
+Un cop generat el dataset desitjat, podem començar a detectar aquelles variables/columnes que són interessants pel nostre estudi.
+
+*****
+# 1.Educació
+*****
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_educacio <- taula_dades[, c("LIB_MOD", 'CODGEO', "P18_POP15P", 'P08_NSCOL15P', 'P08_NSCOL15P_DIPL0', 'P08_NSCOL15P_BAC', 'P08_NSCOL15P_BACP2', 'P08_NSCOL15P_SUP', 'P13_NSCOL15P', 'P13_NSCOL15P_DIPLMIN','P13_NSCOL15P_BAC', 'P13_NSCOL15P_SUP', 'P18_NSCOL15P', 'P18_NSCOL15P_DIPLMIN', 'P18_NSCOL15P_BAC', 'P18_NSCOL15P_SUP2', 'P18_NSCOL15P_SUP34', 'P18_NSCOL15P_SUP5')]
+```
+
+Un cop generat el conjunt dades_educacio, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_educacio, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+Pot existir una gran quantitat de valors buits que representin una pèrdua d'informació i per tant, cal tractar-los de la millor manera. Existeix la possibilitat que aquests valors representin certs valors sentinella, els quals s'haurien d'analitzar, però no és el cas. A continuació, es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_educacio, function(x) sum(is.na(x)))
+```
+
+Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per tant no es necessita cap acció complementaria.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## Primer anàlisi de les dades
+
+Es creen quatre noves variables que ajudaran a validar la tendència del nivell educatiu a la regió parisenca. En aquest cas, per satisfer les necessitats del dataset, es produeixen dades mitjançant la combinació de certes columnes. 
+-	En primer lloc, es creen tres columnes per conèixer el percentatge de població amb estudis superiors en cada ciutat.
+-	En segon lloc, es generen dues columnes amb l’evolució, al llarg de 5 i 10 anys, del nivell d’estudis en cada ciutat.
+
+```{r message= FALSE, warning=FALSE}
+# Creem noves variables d'interés
+dades_educacio[, "SUP_08_%"] <- round((dades_educacio[, "P08_NSCOL15P_BACP2"] + dades_educacio[, "P08_NSCOL15P_BACP2"])/dades_educacio[, "P08_NSCOL15P"]*100, 0)
+dades_educacio[, "SUP_13_%"] <- round((dades_educacio[, "P13_NSCOL15P_SUP"])/dades_educacio[, "P13_NSCOL15P"]*100, 0)
+dades_educacio[, "SUP_18_%"] <- round((dades_educacio[, "P18_NSCOL15P_SUP2"] + dades_educacio[, "P18_NSCOL15P_SUP34"] + dades_educacio[, "P18_NSCOL15P_SUP5"])/dades_educacio[, "P18_NSCOL15P"]*100, 0)
+dades_educacio[, "SUP_08_18_%"] <- round((dades_educacio[, "SUP_18_%"] - dades_educacio[, "SUP_08_%"])/dades_educacio[, "SUP_08_%"]*100, 0)
+dades_educacio[, "SUP_13_18_%"] <- round((dades_educacio[, "SUP_18_%"] - dades_educacio[, "SUP_13_%"])/dades_educacio[, "SUP_13_%"]*100, 0)
+
+# Visualització de les dades
+head(dades_educacio)
+```
+
+## - Exportació de les dades processades 
+
+El dataframe amb les dades preprocessades ja ha estat creat i ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_educacio_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_educacio_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_educacio_paris.csv.
+write.table(dades_educacio[2:21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_educacio_paris.csv", sep = ";", row.names=FALSE) 
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_educacio_pc.csv.
+write.table(dades_educacio[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_educacio_pc.csv", sep = ";", row.names=FALSE) 
+```
+
+*****
+# 2.Migració
+*****
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_migracio <- taula_dades[, c("LIB_MOD", 'CODGEO', 'P08_POP', 'P13_POP', 'P18_POP', 'P08_POP05P', 'P08_POP05P_IRAN1', 'P08_POP05P_IRAN4', 'P13_POP01P', 'P13_POP01P_IRAN1', 'P13_POP01P_IRAN3', 'P13_POP01P_IRAN4', 'P18_POP01P', 'P18_POP01P_IRAN1', 'P18_POP01P_IRAN3', 'P18_POP01P_IRAN4')]
+```
+
+Un cop generat el conjunt dades_migració, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_migracio, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+A continuació, es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_migracio, function(x) sum(is.na(x)))
+
+```
+
+Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per tant no es necessita cap acció complementaria.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## Primer anàlisi de les dades
+
+Es generen dotze noves variables que ajudaran a validar la tendència migratòria a la regió parisenca. 
+En concret: 
+-	6 columnes per conèixer el percentatge de població, al 2013 i 2018, que resideix en el mateix allotjament o migra en altres ciutats i departaments.
+-	3 columnes amb l’evolució, al llarg de 5 i 10 anys, de la població.
+-	3 columnes amb l’evolució, al llarg de 5 anys, del percentatge de població que resideix en el mateix allotjament o migra en altres ciutats i departaments.
+
+```{r message= FALSE, warning=FALSE}
+# Creem noves variables d'interés
+# P08_POP05P_IRAN1 no es comparable amb les dades de 2013 i 2018
+dades_migracio[, "P13_POP01P_IRAN1_%"] <- round((dades_migracio[, "P13_POP01P_IRAN1"] / dades_migracio[, "P13_POP01P"])*100, 0)
+dades_migracio[, "P18_POP01P_IRAN1_%"] <- round((dades_migracio[, "P18_POP01P_IRAN1"] / dades_migracio[, "P18_POP01P"])*100, 0)
+
+dades_migracio[, "P13_POP01P_IRAN3_%"] <- round((dades_migracio[, "P13_POP01P_IRAN3"] / dades_migracio[, "P13_POP01P"])*100, 0)
+dades_migracio[, "P18_POP01P_IRAN3_%"] <- round((dades_migracio[, "P18_POP01P_IRAN3"] / dades_migracio[, "P18_POP01P"])*100, 0)
+
+dades_migracio[, "P13_POP01P_IRAN4_%"] <- round((dades_migracio[, "P13_POP01P_IRAN4"] / dades_migracio[, "P13_POP01P"])*100, 0)
+dades_migracio[, "P18_POP01P_IRAN4_%"] <- round((dades_migracio[, "P18_POP01P_IRAN4"] / dades_migracio[, "P18_POP01P"])*100, 0)
+
+dades_migracio[, "P08_P013_%"] <- round((dades_migracio[, "P13_POP"] - dades_migracio[, "P08_POP"])/dades_migracio[, "P08_POP"]*100, 0)
+dades_migracio[, "P13_P018_%"] <- round((dades_migracio[, "P18_POP"] - dades_migracio[, "P13_POP"])/dades_migracio[, "P13_POP"]*100, 0)
+dades_migracio[, "P08_P018_%"] <- round((dades_migracio[, "P18_POP"] - dades_migracio[, "P08_POP"])/dades_migracio[, "P08_POP"]*100, 0)
+
+dades_migracio[, "IRAN1_13_18_%"] <- round((dades_migracio[, "P18_POP01P_IRAN1_%"] - dades_migracio[, "P13_POP01P_IRAN1_%"])/dades_migracio[, "P13_POP01P_IRAN1_%"]*100, 0)
+dades_migracio[, "IRAN3_13_18_%"] <- round((dades_migracio[, "P18_POP01P_IRAN3_%"] - dades_migracio[, "P13_POP01P_IRAN3_%"])/dades_migracio[, "P13_POP01P_IRAN3_%"]*100, 0)
+dades_migracio[, "IRAN4_13_18_%"] <- round((dades_migracio[, "P18_POP01P_IRAN4_%"] - dades_migracio[, "P13_POP01P_IRAN4_%"])/dades_migracio[, "P13_POP01P_IRAN4_%"]*100, 0)
+
+# Visualització de les dades
+head(dades_migracio)
+```
+
+## - Exportació de les dades processades 
+
+El dataframe amb les dades preprocessades ja ha estat creat i ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_migracio_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_migracio_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_migracio_paris.csv.
+write.table(dades_migracio[2:21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_migracio_paris.csv", sep = ";", row.names=FALSE)
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_migracio_pc.csv.
+write.table(dades_migracio[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_migracio_pc.csv", sep = ";", row.names=FALSE)
+```
+
+*****
+# 3.Salut
+*****
+
+## Càrrega de dades
+
+En aquest apartat, hi ha un pas prèvi als anteriors, ja que s'adjunta un nou fitxer amb dades d'interès.
+
+```{r message= FALSE, warning=FALSE}
+# Càrrega de les dades
+setwd("/Users/eduardruiz/Downloads/Dades Master/Salut/input/")
+data_salut <- read.csv("accessibilite-potentielle-localisee-apl-aux-structures-medico-sociales-destinees.csv", sep=";", dec = ".", header = TRUE)
+```
+
+El dataset té 36571 observacions i 4 variables.
+
+```{r message= FALSE, warning=FALSE}
+# Dimensions del dataset
+dim(data_salut)
+# Visualització del tipus de variable
+sapply(data_salut, function(x) class(x))
+```
+
+Com s'ha fet anteriorment, nosaltres volem aquelles dades que afecten la petita corona de la regió Parisina. Així doncs, sel·leccionarem les dades pels departaments 75, 92, 93 i 94, mitjançant la variable 'CODE_COM'.
+
+```{r message= FALSE, warning=FALSE}
+# Transformació de la variable "CODE_COM" a tipus 'numeric'
+data_salut$CODE_COM <- as.numeric(as.character(data_salut$CODE_COM))
+# Filtrem aquells departaments que ens interessen
+data_salutPC <- data_salut[ which((data_salut$CODE_COM >= 75000 & data_salut$CODE_COM <= 75999) | (data_salut$CODE_COM >= 92000 & data_salut$CODE_COM <= 94999) ), ]
+
+# Dimensions del dataset
+dim(data_salutPC)
+```
+
+El dataframe resultant conté 143 observacions, és a dir, ciutats i 4 variables.
+Realitzarem un merge amb la taula de metadades, ja que necessitem la variable 'LIB_MOD' per saber els noms de cada ciutat.
+
+```{r message= FALSE, warning=FALSE}
+# Merge de dues taules
+taula_dades_salut <- merge(x = data_salutPC, y = meta_data, by.x = "CODE_COM", by.y = "COD_MOD")
+```
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_salut <- taula_dades_salut[, c("LIB_MOD", 'CODE_COM', 'APL_EHPA', 'APL_SAPA')]
+```
+
+Un cop generat el conjunt dades_salut, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_salut, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+Pot existir una gran quantitat de valors buits que representen una pèrdua d'informació i per tant, cal tractar-los de la millor manera. Existeix la possibilitat que aquests valors representin certs valors sentinella, els quals s'haurien d'analitzar, però no és el cas. A continuació es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_salut, function(x) sum(is.na(x)))
+# Percentatge de valors NA per variable
+#map(dades_educacio, ~mean(is.na(.))) 
+```
+
+Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per tant no es necessita cap acció complementaria.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## - Exportació de les dades processades 
+
+En aquest cas, no hi ha cap acció de processament de dades, ja que el dataset conté tots els valors desitjats. Ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_salut_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_salut_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_salut_paris.csv
+write.table(dades_salut[1:20,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_salut_paris.csv", sep = ";", row.names=FALSE) 
+```
+
+```{r,eval=TRUE,echo=TRUE}
+#Guardem el fitxer csv com a dades_salut_pc.csv
+write.table(dades_salut[-1:-20,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_salut_pc.csv", sep = ";", row.names=FALSE)
+```
+
+*****
+# 4.Estat dels treballadors
+*****
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_treball_estat <- taula_dades[, c("LIB_MOD", 'CODGEO', 'C08_POP15P', 'P08_ACT1564', 'P08_CHOM1564', 'C08_POP15P_CS1', 'C08_POP15P_CS2', 'C08_POP15P_CS3', 'C08_POP15P_CS4', 'C08_POP15P_CS5', 'C08_POP15P_CS6', 'C08_POP15P_CS7', 'C08_POP15P_CS8', 'C13_POP15P', 'P13_ACT1564', 'P13_CHOM1564', 'C13_POP15P_CS1', 'C13_POP15P_CS2', 'C13_POP15P_CS3', 'C13_POP15P_CS4', 'C13_POP15P_CS5', 'C13_POP15P_CS6', 'C13_POP15P_CS7', 'C13_POP15P_CS8', 'C18_POP15P', 'P18_ACT1564', 'P18_CHOM1564', 'C18_POP15P_CS1', 'C18_POP15P_CS2', 'C18_POP15P_CS3', 'C18_POP15P_CS4', 'C18_POP15P_CS5', 'C18_POP15P_CS6', 'C18_POP15P_CS7', 'C18_POP15P_CS8')]
+```
+
+Un cop generat el conjunt dades_treball_estat, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_treball_estat, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+A continuació, es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_treball_estat, function(x) sum(is.na(x)))
+```
+
+Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per tant no es necessita cap acció complementaria.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## Primer anàlisi de les dades
+
+Es generen dotze noves variables que ajudaran a validar la tendència de l’estat laboral dels treballadors a la regió parisenca. 
+En concret: 
+-	9 columnes per conèixer el percentatge d’aturats i empleats ocupant un lloc de feina altament qualificat, al 2008, 2013 i 2018.
+-	3 columnes amb l’evolució, al llarg de 5 anys, dels resultats obtinguts a les columnes precedents. 
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_treball_estat[, "Cadres_2008_%"] <- round((dades_treball_estat[, "C08_POP15P_CS3"] / dades_treball_estat[, "C08_POP15P"])*100, 0)
+dades_treball_estat[, "Cadres_2013_%"] <- round((dades_treball_estat[, "C13_POP15P_CS3"] / dades_treball_estat[, "C13_POP15P"])*100, 0)
+dades_treball_estat[, "Cadres_2018_%"] <- round((dades_treball_estat[, "C18_POP15P_CS3"] / dades_treball_estat[, "C18_POP15P"])*100, 0)
+
+dades_treball_estat[, "Aturats_2008_%"] <- round((dades_treball_estat[, "C08_POP15P_CS8"] / dades_treball_estat[, "C08_POP15P"])*100, 0)
+dades_treball_estat[, "Aturats_2013_%"] <- round((dades_treball_estat[, "C13_POP15P_CS8"] / dades_treball_estat[, "C13_POP15P"])*100, 0)
+dades_treball_estat[, "Aturats_2018_%"] <- round((dades_treball_estat[, "C18_POP15P_CS8"] / dades_treball_estat[, "C18_POP15P"])*100, 0)
+
+dades_treball_estat[, "Cad_13_18_%"] <- round((dades_treball_estat[, "Cadres_2018_%"] - dades_treball_estat[, "Cadres_2013_%"])/dades_treball_estat[, "Cadres_2008_%"]*100, 0)
+dades_treball_estat[, "At_13_18_%"] <- round((dades_treball_estat[, "Aturats_2018_%"] - dades_treball_estat[, "Aturats_2013_%"])/dades_treball_estat[, "Aturats_2008_%"]*100, 0)
+
+dades_treball_estat[, "CHOM_08_%"] <- round((dades_treball_estat[, "P08_CHOM1564"] / dades_treball_estat[, "P08_ACT1564"])*100, 0)
+dades_treball_estat[, "CHOM_13_%"] <- round((dades_treball_estat[, "P13_CHOM1564"] / dades_treball_estat[, "P13_ACT1564"])*100, 0)
+dades_treball_estat[, "CHOM_18_%"] <- round((dades_treball_estat[, "P18_CHOM1564"] / dades_treball_estat[, "P18_ACT1564"])*100, 0)
+
+dades_treball_estat[, "CHOM_13_18_%"] <- round((dades_treball_estat[, "CHOM_18_%"] - dades_treball_estat[, "CHOM_13_%"])/dades_treball_estat[, "CHOM_13_%"]*100, 0)
+
+# Visualització de les dades
+head(dades_treball_estat)
+```
+
+## - Exportació de les dades processades 
+
+El dataset amb les dades preprocessades ja ha estat creat i ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_treball_estat_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_treball_estat_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_treball_estat_paris.csv
+write.table(dades_treball_estat[2:21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_treball_estat_paris.csv", sep = ";", row.names=FALSE) 
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_treball_estat_pc.csv
+write.table(dades_treball_estat[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_treball_estat_pc.csv", sep = ";", row.names=FALSE) 
+```
+
+*****
+# 5.Tipus de contracte dels treballadors
+*****
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_treball_cont <- taula_dades[, c("LIB_MOD", 'CODGEO', 'P08_SAL15P', 'P08_HSAL15P_CDI', 'P08_HSAL15P_CDD', 'P08_FSAL15P_CDI', 'P08_FSAL15P_CDD', 'P13_SAL15P', 'P13_HSAL15P_CDI', 'P13_HSAL15P_CDD', 'P13_FSAL15P_CDI', 'P13_FSAL15P_CDD', 'P18_SAL15P', 'P18_HSAL15P_CDI', 'P18_HSAL15P_CDD', 'P18_FSAL15P_CDI', 'P18_FSAL15P_CDD')]
+```
+
+Un cop generat el conjunt dades_treball_cont, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_treball_cont, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+A continuació, es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_treball_cont, function(x) sum(is.na(x)))
+
+```
+
+Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per tant no es necessita cap acció complementaria.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## Primer anàlisi de les dades
+
+Es generen vuit noves variables que ajudaran a veure el tipus de feines que exerceixen els treballadors de la petita corona de Paris. 
+En particular: 
+-	6 columnes per conèixer el percentatge de d’empleats amb un contracte temporal o indefinit, al 2008, 2013 i 2018.
+-	2 columnes amb l’evolució, al llarg de 5 anys, del resultat de les columnes anteriors.
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_treball_cont[, "CDI_08_%"] <- round((dades_treball_cont[, "P08_HSAL15P_CDI"] + dades_treball_cont[, "P08_FSAL15P_CDI"])/dades_treball_cont[, "P08_SAL15P"]*100, 0)
+dades_treball_cont[, "CDD_08_%"] <- round((dades_treball_cont[, "P08_HSAL15P_CDD"] + dades_treball_cont[, "P08_FSAL15P_CDD"])/dades_treball_cont[, "P08_SAL15P"]*100, 0)
+
+dades_treball_cont[, "CDI_13_%"] <- round((dades_treball_cont[, "P13_HSAL15P_CDI"] + dades_treball_cont[, "P13_FSAL15P_CDI"])/dades_treball_cont[, "P13_SAL15P"]*100, 0)
+dades_treball_cont[, "CDD_13_%"] <- round((dades_treball_cont[, "P13_HSAL15P_CDD"] + dades_treball_cont[, "P13_FSAL15P_CDD"])/dades_treball_cont[, "P13_SAL15P"]*100, 0)
+
+dades_treball_cont[, "CDI_18_%"] <- round((dades_treball_cont[, "P18_HSAL15P_CDI"] + dades_treball_cont[, "P18_FSAL15P_CDI"])/dades_treball_cont[, "P18_SAL15P"]*100, 0)
+dades_treball_cont[, "CDD_18_%"] <- round((dades_treball_cont[, "P18_HSAL15P_CDD"] + dades_treball_cont[, "P18_FSAL15P_CDD"])/dades_treball_cont[, "P18_SAL15P"]*100, 0)
+
+dades_treball_cont[, "CDI_13_18_%"] <- round((dades_treball_cont[, "CDI_18_%"] - dades_treball_cont[, "CDI_13_%"])/dades_treball_cont[, "CDI_13_%"]*100, 0)
+dades_treball_cont[, "CDD_13_18_%"] <- round((dades_treball_cont[, "CDD_18_%"] - dades_treball_cont[, "CDD_13_%"])/dades_treball_cont[, "CDD_13_%"]*100, 0)
+
+# Primera visualització de les dades
+head(dades_treball_cont)
+```
+
+## - Exportació de les dades processades 
+
+El dataset amb les dades preprocessades ja ha estat creat i ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_treball_cont_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_treball_cont_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_treball_cont_paris.csv
+write.table(dades_treball_cont[2:21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_treball_cont_paris.csv", sep = ";", row.names=FALSE) 
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_treball_cont_pc.csv
+write.table(dades_treball_cont[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_treball_cont_pc.csv", sep = ";", row.names=FALSE) 
+```
+
+*****
+# 6.Residència dels treballadors
+*****
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_treball_res <- taula_dades[, c("LIB_MOD", 'CODGEO', 'P08_ACTOCC15P', 'P08_ACTOCC15P_ILT1', 'P08_ACTOCC15P_ILT2', 'P08_ACTOCC15P_ILT3', 'P13_ACTOCC15P', 'P13_ACTOCC15P_ILT1', 'P13_ACTOCC15P_ILT2', 'P13_ACTOCC15P_ILT3', 'P18_ACTOCC15P', 'P18_ACTOCC15P_ILT1', 'P18_ACTOCC15P_ILT2', 'P18_ACTOCC15P_ILT3')]
+```
+
+Un cop generat el conjunt dades_treball_res, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_treball_res, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+A continuació, es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_treball_res, function(x) sum(is.na(x)))
+
+```
+
+Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per tant no es necessita cap acció complementaria.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## Primer anàlisi de les dades
+
+Es generen dotze noves variables que detectaran la ubicació que tendeixen a residir els treballadors de la petita corona de Paris. 
+En concret: 
+-	9 columnes per conèixer el percentatge de residents que treballen a la mateixa ciutat, departament o regió, al 2008, 2013 i 2018.
+-	3 columnes amb l’evolució, al llarg de 5 anys, del lloc de residencia dels empleats.
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_treball_res[, "Com_08_%"] <- round((dades_treball_res[, "P08_ACTOCC15P_ILT1"])/dades_treball_res[, "P08_ACTOCC15P"]*100, 0)
+dades_treball_res[, "Dept_08_%"] <- round((dades_treball_res[, "P08_ACTOCC15P_ILT2"])/dades_treball_res[, "P08_ACTOCC15P"]*100, 0)
+dades_treball_res[, "Reg_08_%"] <- round((dades_treball_res[, "P08_ACTOCC15P_ILT3"])/dades_treball_res[, "P08_ACTOCC15P"]*100, 0)
+
+dades_treball_res[, "Com_13_%"] <- round((dades_treball_res[, "P13_ACTOCC15P_ILT1"])/dades_treball_res[, "P13_ACTOCC15P"]*100, 0)
+dades_treball_res[, "Dept_13_%"] <- round((dades_treball_res[, "P13_ACTOCC15P_ILT2"])/dades_treball_res[, "P13_ACTOCC15P"]*100, 0)
+dades_treball_res[, "Reg_13_%"] <- round((dades_treball_res[, "P13_ACTOCC15P_ILT3"])/dades_treball_res[, "P13_ACTOCC15P"]*100, 0)
+
+dades_treball_res[, "Com_18_%"] <- round((dades_treball_res[, "P18_ACTOCC15P_ILT1"])/dades_treball_res[, "P18_ACTOCC15P"]*100, 0)
+dades_treball_res[, "Dept_18_%"] <- round((dades_treball_res[, "P18_ACTOCC15P_ILT2"])/dades_treball_res[, "P18_ACTOCC15P"]*100, 0)
+dades_treball_res[, "Reg_18_%"] <- round((dades_treball_res[, "P18_ACTOCC15P_ILT3"])/dades_treball_res[, "P18_ACTOCC15P"]*100, 0)
+
+dades_treball_res[, "Com_13_18_%"] <- round((dades_treball_res[, "Com_18_%"] - dades_treball_res[, "Com_13_%"])/dades_treball_res[, "Com_13_%"]*100, 0)
+dades_treball_res[, "Dept_13_18_%"] <- round((dades_treball_res[, "Dept_18_%"] - dades_treball_res[, "Dept_13_%"])/dades_treball_res[, "Dept_13_%"]*100, 0)
+dades_treball_res[, "Reg_13_18_%"] <- round((dades_treball_res[, "Reg_18_%"] - dades_treball_res[, "Reg_13_%"])/dades_treball_res[, "Reg_13_%"]*100, 0)
+
+# Visualització de les dades
+head(dades_treball_res)
+```
+
+## - Exportació de les dades processades 
+
+El dataset amb les dades preprocessades ja ha estat creat i ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_treball_res_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_treball_res_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_treball_res_paris.csv
+write.table(dades_treball_res[2:21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_treball_res_paris.csv", sep = ";", row.names=FALSE) 
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_treball_res_pc.csv
+write.table(dades_treball_res[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_treball_res_pc.csv", sep = ";", row.names=FALSE) 
+```
+
+*****
+# 7.Negocis
+*****
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_negocis <- taula_dades[, c("LIB_MOD", 'CODGEO', 'ENCTOT20', 'ENCTOT19', 'ENCTOT18', 'ETCGI19', 'ETCGI18', 'ETCGI20', 'ETCTOT18', 'ETCTOT19', 'ETCTOT20', 'ETCLZ18', 'ETCLZ19', 'ETCLZ20')]
+```
+
+Un cop generat el conjunt dades_negocis, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_negocis, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+A continuació, es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_negocis, function(x) sum(is.na(x)))
+```
+
+Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per tant no es necessita cap acció complementaria.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## Primer anàlisi de les dades
+
+Es generen deu noves variables que ajudaran a validar l’evolució de nous negocis a la regió parisenca. 
+En concret: 
+-	6 columnes per conèixer el percentatge d’establiments minoristes i immobiliaris, entre l’any 2018 i 2020.
+-	4 columnes amb l’evolució, al llarg de 3 anys, dels nous establiments creats.
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_negocis[, "ETCGI18_%"] <- round((dades_negocis[, "ETCGI18"])/dades_negocis[, "ETCTOT18"]*100, 0)
+dades_negocis[, "ETCGI19_%"] <- round((dades_negocis[, "ETCGI19"])/dades_negocis[, "ETCTOT19"]*100, 0)
+dades_negocis[, "ETCGI20_%"] <- round((dades_negocis[, "ETCGI20"])/dades_negocis[, "ETCTOT20"]*100, 0)
+
+dades_negocis[, "ETCLZ18_%"] <- round((dades_negocis[, "ETCLZ18"])/dades_negocis[, "ETCTOT18"]*100, 0)
+dades_negocis[, "ETCLZ19_%"] <- round((dades_negocis[, "ETCLZ19"])/dades_negocis[, "ETCTOT19"]*100, 0)
+dades_negocis[, "ETCLZ20_%"] <- round((dades_negocis[, "ETCLZ20"])/dades_negocis[, "ETCTOT20"]*100, 0)
+
+dades_negocis[, "Total_18_20_%"] <- round((dades_negocis[, "ENCTOT20"] - dades_negocis[, "ENCTOT18"])/dades_negocis[, "ENCTOT18"]*100, 0)
+dades_negocis[, "ETCGI18_20_%"] <- round((dades_negocis[, "ETCGI20"] - dades_negocis[, "ETCGI18"])/dades_negocis[, "ETCGI18"]*100, 0)
+dades_negocis[, "ETCTOT18_20_%"] <- round((dades_negocis[, "ETCTOT20"] - dades_negocis[, "ETCTOT18"])/dades_negocis[, "ETCTOT18"]*100, 0)
+dades_negocis[, "ETCLZ18_20_%"] <- round((dades_negocis[, "ETCLZ20"] - dades_negocis[, "ETCLZ18"])/dades_negocis[, "ETCLZ18"]*100, 0)
+
+# Visualització de les dades
+head(dades_negocis)
+```
+
+## - Exportació de les dades processades 
+
+El dataset amb les dades preprocessades ja ha estat creat i ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_negocis_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_negocis_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_migracio_paris.csv.
+write.table(dades_negocis[2:21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_negocis_paris.csv", sep = ";", row.names=FALSE) 
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a ades_migracio_pc.csv.
+write.table(dades_negocis[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_negocis_pc.csv", sep = ";", row.names=FALSE)
+```
+
+*****
+# 8.Infraestructures i Transport
+*****
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_infra <- taula_dades[, c("LIB_MOD", 'CODGEO', 'P13_ACTOCC15P', 'P13_ACTOCC15P_COMMUN', 'P13_ACTOCC15P_MARCHE', 'P13_ACTOCC15P_VOITURE', 'P18_ACTOCC15P', 'P18_ACTOCC15P_COMMUN', 'P18_ACTOCC15P_MARCHE', 'P18_ACTOCC15P_VOITURE', 'ETCOQ18', 'ETCOQ19', 'ETCOQ20', 'ETCBE18', 'ETCBE19', 'ETCBE20', 'ETCFZ18', 'ETCFZ19', 'ETCFZ20')]
+```
+
+Un cop generat el conjunt dades_infra, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_infra, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+A continuació, es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_infra, function(x) sum(is.na(x)))
+```
+
+Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per tant no es necessita cap acció complementaria.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## Primer anàlisi de les dades
+
+Es generen dotze noves variables que ajudaran a comprovar la tendència de les infraestructures públiques i de transports a la regió parisenca. 
+En concret: 
+-	6 columnes per conèixer el percentatge de residents que utilitzen el transport públic, privat o que caminen per anar a la feina, l’any 2013 i 2018.
+-	3 columnes amb l’evolució, al llarg de 5 anys, de les columnes anteriors.
+-	3 columnes amb la tendència, al llarg de 3 anys, de la creació de noves infraestructures públiques i privades.
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_infra[, "COMMUN_13_%"] <- round((dades_infra[, "P13_ACTOCC15P_COMMUN"])/dades_infra[, "P13_ACTOCC15P"]*100, 0)
+dades_infra[, "MARCHE_13_%"] <- round((dades_infra[, "P13_ACTOCC15P_MARCHE"])/dades_infra[, "P13_ACTOCC15P"]*100, 0)
+dades_infra[, "VOITURE_13_%"] <- round((dades_infra[, "P13_ACTOCC15P_VOITURE"])/dades_infra[, "P13_ACTOCC15P"]*100, 0)
+
+dades_infra[, "COMMUN_18_%"] <- round((dades_infra[, "P18_ACTOCC15P_COMMUN"])/dades_infra[, "P18_ACTOCC15P"]*100, 0)
+dades_infra[, "MARCHE_18_%"] <- round((dades_infra[, "P18_ACTOCC15P_MARCHE"])/dades_infra[, "P18_ACTOCC15P"]*100, 0)
+dades_infra[, "VOITURE_18_%"] <- round((dades_infra[, "P18_ACTOCC15P_VOITURE"])/dades_infra[, "P18_ACTOCC15P"]*100, 0)
+
+dades_infra[, "COMMUN_13_18_%"] <- round((dades_infra[, "COMMUN_18_%"] - dades_infra[, "COMMUN_13_%"])/dades_infra[, "COMMUN_13_%"]*100, 0)
+dades_infra[, "MARCHE_13_18_%"] <- round((dades_infra[, "MARCHE_18_%"] - dades_infra[, "MARCHE_13_%"])/dades_infra[, "MARCHE_13_%"]*100, 0)
+dades_infra[, "VOITURE_13_18_%"] <- round((dades_infra[, "VOITURE_18_%"] - dades_infra[, "VOITURE_13_%"])/dades_infra[, "VOITURE_13_%"]*100, 0)
+
+dades_infra[, "ETCOQ18_20_%"] <- round((dades_infra[, "ETCOQ20"] - dades_infra[, "ETCOQ18"])/dades_infra[, "ETCOQ18"]*100, 0)
+dades_infra[, "ETCBE18_20_%"] <- round((dades_infra[, "ETCBE20"] - dades_infra[, "ETCBE18"])/dades_infra[, "ETCBE18"]*100, 0)
+dades_infra[, "ETCFZ18_20_%"] <- round((dades_infra[, "ETCFZ20"] - dades_infra[, "ETCFZ18"])/dades_infra[, "ETCFZ18"]*100, 0)
+
+# Visualització de les dades
+head(dades_infra)
+```
+
+## - Exportació de les dades processades 
+
+El dataset amb les dades preprocessades ja ha estat creat i ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_infra_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_infra_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_infra_paris.csv
+write.table(dades_infra[2:21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_infra_paris.csv", sep = ";", row.names=FALSE) 
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_infra_pc.csv
+write.table(dades_infra[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_infra_pc.csv", sep = ";", row.names=FALSE)
+```
+
+*****
+# 9.Ingressos
+*****
+
+## Càrrega de dades
+
+En aquest apartat, hi ha un pas prèvi, ja que s'adjunta un nou fitxer amb dades del nivell de vida l'any 2015.
+
+```{r message= FALSE, warning=FALSE}
+# Càrrega de les dades
+setwd("/Users/eduardruiz/Downloads/Dades Master/Ingressos/input/")
+data_ingressos <- read.csv("med_15.csv", sep=";", dec = ".", header = TRUE)
+```
+
+El dataset té 36707 observacions i 4 variables.
+
+```{r message= FALSE, warning=FALSE}
+# Dimensions del dataset
+dim(data_ingressos)
+# Visualització del tipus de variable
+sapply(data_ingressos, function(x) class(x))
+```
+
+Com s'ha fet anteriorment, nosaltres volem aquelles dades que afecten la petita corona de la regió Parisina. Així doncs, sel·leccionarem les dades pels departaments 75, 92, 93 i 94, mitjançant la variable 'CODGEO'.
+
+```{r message= FALSE, warning=FALSE}
+# Transformació de la variable "CODGEO" a tipus 'numeric'
+data_ingressos$CODGEO <- as.numeric(as.character(data_ingressos$CODGEO))
+# Filtrem aquells departaments que ens interessen
+data_ingressosPC <- data_ingressos[ which((data_ingressos$CODGEO >= 75000 & data_ingressos$CODGEO <= 75999) | (data_ingressos$CODGEO >= 92000 & data_ingressos$CODGEO <= 94999) ), ]
+
+# Dimensions del dataset
+dim(data_ingressosPC)
+```
+
+El dataframe resultant conté 144 observacions, és a dir, ciutats i 4 variables.
+Realitzarem un merge amb la taula de metadades, ja que necessitem la variable 'LIB_MOD' per saber els noms de cada ciutat.
+
+```{r message= FALSE, warning=FALSE}
+# Merge de dues taules
+taula_dades <- merge(x = data_ingressosPC, y = taula_dades, by.x = "CODGEO", by.y = "CODGEO")
+```
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_ingressos <- taula_dades[, c("LIB_MOD", 'CODGEO', 'MED15', 'MED18', 'TP6015', 'TP6018', 'TP60TOL118','TP60TOL218', 'SNHM19', 'SNHMC19', 'SNHMP19', 'SNHME19', 'SNHMO19')]
+```
+
+Un cop generat el conjunt dades_ingressos, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_ingressos, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+A continuació, es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_ingressos, function(x) sum(is.na(x)))
+```
+
+Amb aquests resultats es pot confirmar que hi ha alguns valors NA (zero o nul), tot i això, aquests casos minoritaris els ignorarem, ja que no perjudiquen l'estudi.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## Primer anàlisi de les dades
+
+Es generen dos noves variables que ajudaran a comprovar l’evolució de la taxa de pobresa i el nivell de vida mitjà, entre els anys 2015 i 2018, a la regió parisenca.
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_ingressos[, "MED15_18_%"] <- round((dades_ingressos[, "MED18"] - dades_ingressos[, "MED15"])/dades_ingressos[, "MED15"]*100, 0)
+dades_ingressos[, "TP6015_18_%"] <- round((dades_ingressos[, "TP6018"] - dades_ingressos[, "TP6015"])/dades_ingressos[, "TP6015"]*100, 0)
+
+# Visualització de les dades
+head(dades_ingressos)
+```
+
+## - Exportació de les dades processades 
+
+El dataset amb les dades preprocessades ja ha estat creat i ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_ingressos_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_ingressos_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_ingressos_paris.csv
+write.table(dades_ingressos[2:21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_ingressos_paris.csv", sep = ";", row.names=FALSE) 
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_ingressos_pc.csv
+write.table(dades_ingressos[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_ingressos_pc.csv", sep = ";", row.names=FALSE)
+```
+
+*****
+# 10.Habitatges
+*****
+
+## Càrrega de dades
+
+Primer de tot, s'importa un nou fitxer amb dades del preu dels habitatges l'any 2019.
+
+```{r message= FALSE, warning=FALSE}
+# Càrrega de les dades
+setwd("/Users/eduardruiz/Downloads/Dades Master/Habitatges/input/")
+data_habitatges <- read.csv("prixm2-loyer-communes-2019.csv", sep=",", dec = ".", header = TRUE)
+
+# Seleccionem les columnes desitjades
+data_habitatges <- data_habitatges[, c("INSEE_COM", 'NOM_COM_M', 'Nb_Ventes', 'PrixMoyen_M2', 'PrixMoyen_M2_1819', 'loyer_apparts', 'loyer_maisons')]
+```
+
+El dataset té 34886 observacions i 7 variables.
+
+```{r message= FALSE, warning=FALSE}
+# Dimensions del dataset
+dim(data_habitatges)
+# Visualització del tipus de variable
+sapply(data_habitatges, function(x) class(x))
+```
+
+Com s'ha fet anteriorment, nosaltres volem aquelles dades que afecten la petita corona de la regió Parisina. Així doncs, sel·leccionarem les dades pels departaments 75, 92, 93 i 94, mitjançant la variable 'INSEE_COM'.
+
+```{r message= FALSE, warning=FALSE}
+# Transformació de la variable "INSEE_COM" a tipus 'numeric'
+data_habitatges$INSEE_COM <- as.numeric(as.character(data_habitatges$INSEE_COM))
+# Filtrem aquells departaments que ens interessen
+data_habitatgesPC <- data_habitatges[ which((data_habitatges$INSEE_COM >= 75000 & data_habitatges$INSEE_COM <= 75999) | (data_habitatges$INSEE_COM >= 92000 & data_habitatges$INSEE_COM <= 94999) ), ]
+
+# Dimensions del dataset
+dim(data_habitatgesPC)
+```
+
+El dataset resultant conté 144 observacions, és a dir, ciutats i 7 variables.
+Realitzarem un merge amb la taula de metadades, ja que necessitem la variable 'LIB_MOD' per saber els noms de cada ciutat.
+
+```{r message= FALSE, warning=FALSE}
+# Merge de dues taules
+taula_dades <- merge(x = data_habitatgesPC, y = taula_dades, by.x = "INSEE_COM", by.y = "CODGEO")
+```
+
+Tanmateix, s'importa un nou fitxer amb dades del preu dels habitatges l'any 2017.
+S'efectuen les mateixes accions de l'apartat anterior.
+
+```{r message= FALSE, warning=FALSE}
+# Càrrega de les dades
+setwd("/Users/eduardruiz/Downloads/Dades Master/Habitatges/input/")
+data_habitatges_2017 <- read.csv("prixm2-communes-2017.csv", sep=",", dec = ".", header = TRUE)
+
+# Seleccionem les columnes desitjades
+data_habitatges_2017 <- data_habitatges_2017[, c("INSEE_COM", 'Prixm2')]
+# Transformació de la variable "INSEE_COM" a tipus 'numeric'
+data_habitatges_2017$INSEE_COM <- as.numeric(as.character(data_habitatges_2017$INSEE_COM))
+# Filtrem aquells departaments que ens interessen
+data_habitatges_2017 <- data_habitatges_2017[ which((data_habitatges_2017$INSEE_COM >= 75000 & data_habitatges_2017$INSEE_COM <= 75999) | (data_habitatges_2017$INSEE_COM >= 92000 & data_habitatges_2017$INSEE_COM <= 94999) ), ]
+
+# Merge de dues taules
+taula_dades <- merge(x = taula_dades, y = data_habitatges_2017, by.x = "INSEE_COM", by.y = "INSEE_COM", all = TRUE)
+```
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_habitat <- taula_dades[, c("LIB_MOD", 'INSEE_COM', 'P08_LOG', 'C08_MEN', 'P08_RP', 'P08_RSECOCC', 'P08_LOGVAC', 'P08_RP_PROP', 'P08_RP_LOC', 'P08_ANEM_RP_PROP', 'P08_ANEM_RP_LOC', 'P08_RP_VOIT1P', 'P13_LOG', 'C13_MEN', 'P13_RP','P13_RSECOCC', 'P13_LOGVAC', 'P13_RP_PROP', 'P13_RP_LOC', 'P13_ANEM_RP_PROP','P13_ANEM_RP_LOC', 'P13_RP_VOIT1P', 'P18_LOG', 'C18_MEN', 'P18_RP', 'P18_RSECOCC', 'P18_LOGVAC', 'P18_RP_PROP', 'P18_RP_LOC', 'P18_ANEM_RP_PROP', 'P18_ANEM_RP_LOC', 'P18_RP_VOIT1P', 'Prixm2', 'Nb_Ventes', 'PrixMoyen_M2', 'PrixMoyen_M2_1819', 'loyer_apparts', 'loyer_maisons')]
+```
+
+Un cop generat el conjunt dades_habitat, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_habitat, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+A continuació, es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_habitat, function(x) sum(is.na(x)))
+```
+
+Amb aquests resultats es pot confirmar que hi ha alguns valors, minoritaris NA (zero o nul), per tant no es realitzarà cap acció.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## Primer anàlisi de les dades
+
+Es generen setze noves variables per conèixer millor l’evolució i l’estructura d’allotjaments a la regió parisenca. 
+En concret: 
+-	6 columnes per conèixer el percentatge de residències principals o secundàries, l’any 2013 i 2018.
+-	6 columnes per saber qui ocupa els habitatges, ja siguin els llogaters o els propis propietaris, l’any 2013 i 2018.
+-	Una columna amb l’evolució, al llarg de 2 anys, del preu immobiliari.
+-	3 columnes amb la tendència de l’ús del cotxe entre els anys 2013 i 2018.
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_habitat[, "RP_13_%"] <- round((dades_habitat[, "P13_RP"] / dades_habitat[, "P13_LOG"])*100, 0)
+dades_habitat[, "RSE_13_%"] <- round((dades_habitat[, "P13_RSECOCC"] / dades_habitat[, "P13_LOG"])*100, 0)
+dades_habitat[, "VAC_13_%"] <- round((dades_habitat[, "P13_LOGVAC"] / dades_habitat[, "P13_LOG"])*100, 0)
+
+dades_habitat[, "RP_18_%"] <- round((dades_habitat[, "P18_RP"] / dades_habitat[, "P18_LOG"])*100, 0)
+dades_habitat[, "RSE_18_%"] <- round((dades_habitat[, "P18_RSECOCC"] / dades_habitat[, "P18_LOG"])*100, 0)
+dades_habitat[, "VAC_18_%"] <- round((dades_habitat[, "P18_LOGVAC"] / dades_habitat[, "P18_LOG"])*100, 0)
+
+dades_habitat[, "RP_PROP_13_%"] <- round((dades_habitat[, "P13_RP_PROP"] / dades_habitat[, "P13_RP"])*100, 0)
+dades_habitat[, "RP_LOC_13_%"] <- round((dades_habitat[, "P13_RP_LOC"] / dades_habitat[, "P13_RP"])*100, 0)
+
+dades_habitat[, "RP_PROP_18_%"] <- round((dades_habitat[, "P18_RP_PROP"] / dades_habitat[, "P18_RP"])*100, 0)
+dades_habitat[, "RP_LOC_18_%"] <- round((dades_habitat[, "P18_RP_LOC"] / dades_habitat[, "P18_RP"])*100, 0)
+
+dades_habitat[, "PROP_13_18_%"] <- round((dades_habitat[, "RP_PROP_18_%"] - dades_habitat[, "RP_PROP_13_%"])/dades_habitat[, "RP_PROP_13_%"]*100, 0)
+dades_habitat[, "LOC_13_18_%"] <- round((dades_habitat[, "RP_LOC_18_%"] - dades_habitat[, "RP_LOC_13_%"])/dades_habitat[, "RP_LOC_13_%"]*100, 0)
+
+dades_habitat[, "VOIT_13_%"] <- round((dades_habitat[, "P13_RP_VOIT1P"] / dades_habitat[, "C13_MEN"])*100, 0)
+dades_habitat[, "VOIT_18_%"] <- round((dades_habitat[, "P18_RP_VOIT1P"] / dades_habitat[, "C18_MEN"])*100, 0)
+dades_habitat[, "VOIT_13_18_%"] <- round((dades_habitat[, "VOIT_18_%"] - dades_habitat[, "VOIT_13_%"])/dades_habitat[, "VOIT_13_%"]*100, 0)
+
+dades_habitat[, "PRIX17_19_%"] <- round((dades_habitat[, "PrixMoyen_M2_1819"] - dades_habitat[, "Prixm2"])/dades_habitat[, "Prixm2"]*100, 0)
+
+# Visualització de les dades
+head(dades_habitat)
+```
+
+## - Exportació de les dades processades 
+
+El dataset amb les dades preprocessades ja ha estat creat i ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_habitat_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_habitat_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_habitat_paris.csv
+write.table(dades_habitat[2:21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_habitat_paris.csv", sep = ";", row.names=FALSE) 
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_habitat_pc.csv
+write.table(dades_habitat[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_habitat_pc.csv", sep = ";", row.names=FALSE)
+```
+
+*****
+# 11.Turisme
+*****
+
+## Selecció de les dades d’interès a analitzar
+
+```{r message= FALSE, warning=FALSE}
+# Seleccionem les columnes que ens interessen
+dades_turisme <- taula_dades[, c("LIB_MOD", 'INSEE_COM', 'HT21', 'VV21', 'VVUH21', 'RT21')]
+```
+
+Un cop generat el conjunt dades_turisme, amb les variables que han de ser analitzades, visualitzarem el tipus de cada columna, per saber si s'han d'efectuar modificacions.
+
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del tipus de variable
+sapply(dades_turisme, function(x) class(x))
+```
+
+## Neteja de dades
+
+### - Zeros i elements buits
+
+A continuació, es pot observar el nombre total de valors NA per cada variable :
+
+```{r,warning=FALSE,message=FALSE}
+library(purrr)
+```
+```{r,eval=TRUE,echo=TRUE}
+# Visualització del nombre total de valors NA
+sapply(dades_turisme, function(x) sum(is.na(x)))
+```
+
+Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per tant no es necessita cap acció complementaria.
+
+### - Valors extrems
+
+No es detecten valors extrems.
+
+## - Exportació de les dades processades 
+
+En aquest cas, no hi ha cap acció de processament de dades, ja que el dataset conté tots els valors desitjats. Ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper.
+
+Per tant, s’exporten les dades en dos fitxers csv :
+-	dades_turisme_paris.csv, amb les dades de cada districte de la ciutat de Paris.
+-	dades_turisme_pc.csv, amb les dades de totes les ciutats de la petita corona de Paris.
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_turisme_paris.csv
+write.table(dades_turisme[2:21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_turisme_paris.csv", sep = ";", row.names=FALSE) 
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_turisme_pc.csv
+write.table(dades_turisme[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Master/dades_turisme_pc.csv", sep = ";", row.names=FALSE)
+```
+
+*****
+# 12.Clustering
+*****
+
+En primer lloc, creem una taula per cada temàtica estudiada anteriorment, amb les variables desitjades.
+
+```{r message= FALSE, warning=FALSE}
+# Nivell educatiu
+dades_educacio_final <- dades_educacio[, c('CODGEO', "SUP_13_18_%")]
+# Dades de migració
+dades_migracio_final <- dades_migracio[, c('CODGEO', 'P13_P018_%', 'P18_POP01P_IRAN1_%')]
+# Dades de salut
+dades_salut_final <- dades_salut[, c('CODE_COM', 'APL_SAPA')]
+# Dades de l'estat dels treballadors
+dades_treball_estat_final <- dades_treball_estat[, c('CODGEO', 'CHOM_13_18_%', 'Cad_13_18_%')]
+# Dades del contracte dels treballadors
+dades_treball_cont_final <- dades_treball_cont[, c('CODGEO', 'CDI_13_18_%')]
+# Dades del negoci
+dades_negocis_final <- dades_negocis[, c('CODGEO', 'Total_18_20_%', 'ETCGI20_%')]
+# Dades de les infraestructures públiques
+dades_infra_final <- dades_infra[, c('CODGEO', 'COMMUN_13_18_%', 'ETCOQ18_20_%')]
+# Dades dels ingressos
+dades_ingressos_final <- dades_ingressos[, c('CODGEO', 'MED15_18_%', 'MED18')]
+# Dades dels habitatges
+dades_habitat_final <- dades_habitat[, c('INSEE_COM', 'PRIX17_19_%', 'PrixMoyen_M2_1819', 'LOC_13_18_%')]
+```
+
+Realitzarem un merge amb totes les taula creades per obtenir un dataset global.
+
+```{r message= FALSE, warning=FALSE}
+# Merge de totes les taules amb les dades que ens interessen
+dades_final <- merge(x = dades_educacio_final, y = dades_migracio_final, by.x = "CODGEO", by.y = "CODGEO")
+dades_final <- merge(x = dades_salut_final, y = dades_final, by.x = "CODE_COM", by.y = "CODGEO")
+dades_final <- merge(x = dades_treball_estat_final, y = dades_final, by.x = "CODGEO", by.y = "CODE_COM")
+dades_final <- merge(x = dades_treball_cont_final, y = dades_final, by.x = "CODGEO", by.y = "CODGEO")
+dades_final <- merge(x = dades_negocis_final, y = dades_final, by.x = "CODGEO", by.y = "CODGEO")
+dades_final <- merge(x = dades_infra_final, y = dades_final, by.x = "CODGEO", by.y = "CODGEO")
+dades_final <- merge(x = dades_ingressos_final, y = dades_final, by.x = "CODGEO", by.y = "CODGEO")
+dades_final <- merge(x = dades_habitat_final, y = dades_final, by.x = "INSEE_COM", by.y = "CODGEO")
+head(dades_final)
+```
+
+Tal i com s'ha mostrat anteriorment, en una secció hi havien valors NA, així que s'afegiran manualment.
+
+```{r message= FALSE, warning=FALSE}
+# Addició de valors mancants
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75101] <- 16.5
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75102] <- 11.3
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75103] <- 2.1
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75104] <- 3.9
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75105] <- 3.9
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75106] <- -13
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75107] <- -3.5
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75108] <- -1.5
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75109] <- 10.2
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75110] <- 13.4
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75111] <- 11.9
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75112] <- 3.8
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75113] <- 11.9
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75114] <- 5.6
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75115] <- 7.8
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75116] <- -1.6
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75117] <- 5.1
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75118] <- 6.6
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75119] <- 15
+dades_final["PRIX17_19_%"][dades_final["INSEE_COM"] == 75120] <- 15.2
+
+# Creem una taula per la ciutat de Paris i una per les ciutats de la petita corona de Paris
+dades_final_paris<- dades_final[1:20,]
+dades_final <- dades_final[-1:-20,]
+```
+
+## Anàlisi de dades petita corona de Paris
+
+Intenem esbrinar el número òptim de clústers, provem amb diferents valors (2-10) i diferents metodologies :
+
+*1. Silhouette*
+
+```{r message= FALSE, warning=FALSE}
+library(cluster)
+d <- daisy(dades_final) 
+resultados <- rep(0, 10)
+for (i in c(2,3,4,5,6,7,8,9,10))
+{
+  fit           <- kmeans(dades_final, i)
+  y_cluster     <- fit$cluster
+  sk            <- silhouette(y_cluster, d)
+  resultados[i] <- mean(sk[,3])
+}
+```
+
+Mostrem en una gràfica els valors de la silueta mitja de cada prova per comprovar quin número de clústers és el millor.
+
+```{r message= FALSE, warning=FALSE}
+plot(2:10,resultados[2:10],type="o",col="blue",pch=0,xlab="Número de clusters",ylab="Silueta")
+```
+
+El millor valor que obtenim per silueta és k=4. Cal remarcar que els valors 3,4 i 5 estan bastant igualats.
+
+En paral·lel, podem avaluar la qualitat de l'agregació. Per això farem servir la funció silhouette i incorporarem també els clústers de k=3, k=4, k=5 i k=6, per tenir una opinió generalitzada de la qualitat obtinguda.
+
+```{r message= FALSE, warning=FALSE}
+d  <- daisy(dades_final) 
+
+fit3       <- kmeans(dades_final, 3)
+y_cluster3 <- fit3$cluster
+sk3 <- silhouette(y_cluster3, d)
+
+fit4       <- kmeans(dades_final, 4)
+y_cluster4 <- fit4$cluster
+sk4 <- silhouette(y_cluster4, d)
+
+fit5       <- kmeans(dades_final, 5)
+y_cluster5 <- fit5$cluster
+sk5 <- silhouette(y_cluster5, d)
+
+fit6       <- kmeans(dades_final, 6)
+y_cluster6 <- fit6$cluster
+sk6 <- silhouette(y_cluster6, d)
+```
+
+Calculant la mitjana de la tercera columna podem obtenir una estimació de la qualitat de l'agrupament.
+
+```{r message= FALSE, warning=FALSE}
+mean(sk3[,3])
+mean(sk4[,3])
+mean(sk5[,3])
+mean(sk6[,3])
+```
+
+Segons els resultats obtinguts, la millor opció seria agrupar en quatre clústers, ja que la qualitat és superior. Però per ben diferenciar les zones de la petita corona de Paris, continuarem amb k=5.
+
+Per acabar, podem visualitzar els 5 clústers :
+
+```{r message= FALSE, warning=FALSE}
+#data5clusters <- kmeans(dades_final, 5)
+# Visualització dels clústers kmeans
+clusplot(dades_final, fit5$cluster, color=TRUE, shade=TRUE, labels=5, lines=0)
+```
+```{r message= FALSE, warning=FALSE}
+# Afegim la columna amb els clústers resultants
+dades_final$cluster <- factor(fit5$cluster)
+# Visualització de les dades
+head(dades_final)
+```
+
+## - Exportació de les dades processades 
+
+Ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper i Tableau Public.
+
+Abans d'això :
+-	Realitzarem un merge amb la taula dades_educacio, ja que necessitem la variable 'LIB_MOD' per saber els noms de cada ciutat.
+-	Convertim la columna cluster a tipus factor per modificar els nivells ("Inexistent", "Baix", "Moderat", "Elevat", "Crític").
+
+```{r message= FALSE, warning=FALSE}
+# Addició de la columna amb el nom de les ciutats
+metadata_final <- dades_educacio[, c('CODGEO', "LIB_MOD")]
+dades_final <- merge(x = metadata_final, y = dades_final, by.x = "CODGEO", by.y = "INSEE_COM")
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Conversió a tipus factor
+dades_final$cluster <- sapply(dades_final$cluster,factor)
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Amb els valors obtinguts anteriorment, podem discretitzar la variable "cluster" en els següents factors
+levels(dades_final$cluster)[levels(dades_final$cluster)==1] <- "Crític"
+levels(dades_final$cluster)[levels(dades_final$cluster)==2] <- "Baix"
+levels(dades_final$cluster)[levels(dades_final$cluster)==3] <- "Moderat"
+levels(dades_final$cluster)[levels(dades_final$cluster)==4] <- "Elevat"
+levels(dades_final$cluster)[levels(dades_final$cluster)==5] <- "Inexistent"
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_final_pc.csv
+write.table(dades_final, file = "/Users/eduardruiz/Downloads/Dades Master/dades_final_pc.csv", sep = ";", row.names=FALSE)
+```
+
+## Anàlisi de dades de Paris
+
+Intenem esbrinar el número òptim de clústers, provem amb diferents valors (2-10) i diferents metodologies :
+
+*1. Silhouette*
+
+```{r message= FALSE, warning=FALSE}
+library(cluster)
+d <- daisy(dades_final_paris) 
+resultados <- rep(0, 10)
+for (i in c(2,3,4,5,6,7,8,9,10))
+{
+  fit           <- kmeans(dades_final_paris, i)
+  y_cluster     <- fit$cluster
+  sk            <- silhouette(y_cluster, d)
+  resultados[i] <- mean(sk[,3])
+}
+```
+
+Mostrem en una gràfica els valors de la silueta mitja de cada prova per comprovar quin número de clústers és el millor.
+
+```{r message= FALSE, warning=FALSE}
+plot(2:10,resultados[2:10],type="o",col="blue",pch=0,xlab="Número de clusters",ylab="Silueta")
+```
+
+El millor valor que obtenim per silueta és k=4. Cal remarcar la forta pujada que fa a k=9, igualant els nivells de 3 i 5.
+
+En paral·lel, podem avaluar la qualitat de l'agregació. Per això farem servir la funció silhouette i incorporarem també els clústers de k=3, k=4 i k=5, per tenir una opinió generalitzada de la qualitat obtinguda.
+
+```{r message= FALSE, warning=FALSE}
+d  <- daisy(dades_final_paris) 
+
+fit3       <- kmeans(dades_final_paris, 3)
+y_cluster3 <- fit3$cluster
+sk3 <- silhouette(y_cluster3, d)
+
+fit4       <- kmeans(dades_final_paris, 4)
+y_cluster4 <- fit4$cluster
+sk4 <- silhouette(y_cluster4, d)
+
+fit5       <- kmeans(dades_final_paris, 5)
+y_cluster5 <- fit5$cluster
+sk5 <- silhouette(y_cluster5, d)
+```
+
+Calculant la mitjana de la tercera columna podem obtenir una estimació de la qualitat de l'agrupament.
+
+```{r message= FALSE, warning=FALSE}
+mean(sk3[,3])
+mean(sk4[,3])
+mean(sk5[,3])
+```
+
+Segons els resultats obtinguts, la millor opció serà agrupar en quatre clústers, ja que la qualitat és superior.
+
+Per acabar, podem comparar els diferents datasets (clean i original) en funció de les seves variables :
+
+```{r message= FALSE, warning=FALSE}
+#data4clusters <- kmeans(dades_final_paris, 4)
+# Visualització dels clústers kmeans
+clusplot(dades_final_paris, fit4$cluster, color=TRUE, shade=TRUE, labels=4, lines=0)
+```
+
+```{r message= FALSE, warning=FALSE}
+# Afegim la columna amb els clústers resultants
+dades_final_paris$cluster <- factor(fit4$cluster)
+```
+
+## - Exportació de les dades processades 
+
+Ara toca exportar el resultat per poder ser utilitzat en la fase d'anàlisi visual mitjançant l'eina datawrapper i Tableau Public.
+
+Abans d'això :
+-	Realitzarem un merge amb la taula dades_educacio, ja que necessitem la variable 'LIB_MOD' per saber els noms de cada ciutat.
+-	Convertim la columna cluster a tipus factor per modificar els nivells ("Baix", "Moderat", "Elevat", "Crític").
+
+```{r message= FALSE, warning=FALSE}
+# Addició de la columna amb el nom de les ciutats
+metadata_final <- dades_educacio[, c('CODGEO', "LIB_MOD")]
+dades_final_paris <- merge(x = metadata_final, y = dades_final_paris, by.x = "CODGEO", by.y = "INSEE_COM")
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Amb els valors obtinguts anteriorment, podem discretitzar la variable "cluster" en els següents factors
+levels(dades_final_paris$cluster)[levels(dades_final_paris$cluster)==1] <- "Crític"
+levels(dades_final_paris$cluster)[levels(dades_final_paris$cluster)==2] <- "Baix"
+levels(dades_final_paris$cluster)[levels(dades_final_paris$cluster)==3] <- "Elevat"
+levels(dades_final_paris$cluster)[levels(dades_final_paris$cluster)==4] <- "Moderat"
+```
+
+```{r,eval=TRUE,echo=TRUE}
+# Guardem el fitxer csv com a dades_final_paris.csv
+write.table(dades_final_paris, file = "/Users/eduardruiz/Downloads/Dades Master/dades_final_paris.csv", sep = ";", row.names=FALSE) 
+```
