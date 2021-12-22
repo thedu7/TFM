@@ -52,3 +52,6 @@ En aquest GitHub es poden trobar els següents fitxers:
 
 *  **Final/** directori que conté els fitxers amb les dades netes resultants del procés d'explotació de dades.
      *  **Final/Visual/** directori amb les visualitzacions datawrapper.
+
+*  **Codi/** directori que conté el fitxer rmd amb les operacions realitzades sobre les dades.
+
