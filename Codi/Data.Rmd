@@ -70,7 +70,7 @@ Un cop generat el dataset desitjat, podem començar a detectar aquelles variable
 # 1.Educació
 *****
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
@@ -104,7 +104,7 @@ Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per 
 
 No es detecten valors extrems.
 
-## Primer anàlisi de les dades
+## Primer anàlisi de les dades
 
 Es creen quatre noves variables que ajudaran a validar la tendència del nivell educatiu a la regió parisenca. En aquest cas, per satisfer les necessitats del dataset, es produeixen dades mitjançant la combinació de certes columnes. 
 -	En primer lloc, es creen tres columnes per conèixer el percentatge de població amb estudis superiors en cada ciutat.
@@ -144,7 +144,7 @@ write.table(dades_educacio[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades M
 # 2.Migració
 *****
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
@@ -179,7 +179,7 @@ Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per 
 
 No es detecten valors extrems.
 
-## Primer anàlisi de les dades
+## Primer anàlisi de les dades
 
 Es generen dotze noves variables que ajudaran a validar la tendència migratòria a la regió parisenca. 
 En concret: 
@@ -272,7 +272,7 @@ Realitzarem un merge amb la taula de metadades, ja que necessitem la variable 'L
 taula_dades_salut <- merge(x = data_salutPC, y = meta_data, by.x = "CODE_COM", by.y = "COD_MOD")
 ```
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
@@ -330,7 +330,7 @@ write.table(dades_salut[-1:-20,], file = "/Users/eduardruiz/Downloads/Dades Mast
 # 4.Estat dels treballadors
 *****
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
@@ -364,7 +364,7 @@ Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per 
 
 No es detecten valors extrems.
 
-## Primer anàlisi de les dades
+## Primer anàlisi de les dades
 
 Es generen dotze noves variables que ajudaran a validar la tendència de l’estat laboral dels treballadors a la regió parisenca. 
 En concret: 
@@ -416,7 +416,7 @@ write.table(dades_treball_estat[-2:-21,], file = "/Users/eduardruiz/Downloads/Da
 # 5.Tipus de contracte dels treballadors
 *****
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
@@ -451,7 +451,7 @@ Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per 
 
 No es detecten valors extrems.
 
-## Primer anàlisi de les dades
+## Primer anàlisi de les dades
 
 Es generen vuit noves variables que ajudaran a veure el tipus de feines que exerceixen els treballadors de la petita corona de Paris. 
 En particular: 
@@ -498,7 +498,7 @@ write.table(dades_treball_cont[-2:-21,], file = "/Users/eduardruiz/Downloads/Dad
 # 6.Residència dels treballadors
 *****
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
@@ -533,7 +533,7 @@ Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per 
 
 No es detecten valors extrems.
 
-## Primer anàlisi de les dades
+## Primer anàlisi de les dades
 
 Es generen dotze noves variables que detectaran la ubicació que tendeixen a residir els treballadors de la petita corona de Paris. 
 En concret: 
@@ -584,7 +584,7 @@ write.table(dades_treball_res[-2:-21,], file = "/Users/eduardruiz/Downloads/Dade
 # 7.Negocis
 *****
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
@@ -618,7 +618,7 @@ Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per 
 
 No es detecten valors extrems.
 
-## Primer anàlisi de les dades
+## Primer anàlisi de les dades
 
 Es generen deu noves variables que ajudaran a validar l’evolució de nous negocis a la regió parisenca. 
 En concret: 
@@ -666,7 +666,7 @@ write.table(dades_negocis[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Ma
 # 8.Infraestructures i Transport
 *****
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
@@ -700,7 +700,7 @@ Amb aquests resultats es pot confirmar que no hi ha valors NA (zero o nul), per 
 
 No es detecten valors extrems.
 
-## Primer anàlisi de les dades
+## Primer anàlisi de les dades
 
 Es generen dotze noves variables que ajudaran a comprovar la tendència de les infraestructures públiques i de transports a la regió parisenca. 
 En concret: 
@@ -791,7 +791,7 @@ Realitzarem un merge amb la taula de metadades, ja que necessitem la variable 'L
 taula_dades <- merge(x = data_ingressosPC, y = taula_dades, by.x = "CODGEO", by.y = "CODGEO")
 ```
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
@@ -825,7 +825,7 @@ Amb aquests resultats es pot confirmar que hi ha alguns valors NA (zero o nul), 
 
 No es detecten valors extrems.
 
-## Primer anàlisi de les dades
+## Primer anàlisi de les dades
 
 Es generen dos noves variables que ajudaran a comprovar l’evolució de la taxa de pobresa i el nivell de vida mitjà, entre els anys 2015 i 2018, a la regió parisenca.
 
@@ -921,7 +921,7 @@ data_habitatges_2017 <- data_habitatges_2017[ which((data_habitatges_2017$INSEE_
 taula_dades <- merge(x = taula_dades, y = data_habitatges_2017, by.x = "INSEE_COM", by.y = "INSEE_COM", all = TRUE)
 ```
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
@@ -955,7 +955,7 @@ Amb aquests resultats es pot confirmar que hi ha alguns valors, minoritaris NA (
 
 No es detecten valors extrems.
 
-## Primer anàlisi de les dades
+## Primer anàlisi de les dades
 
 Es generen setze noves variables per conèixer millor l’evolució i l’estructura d’allotjaments a la regió parisenca. 
 En concret: 
@@ -1015,7 +1015,7 @@ write.table(dades_habitat[-2:-21,], file = "/Users/eduardruiz/Downloads/Dades Ma
 # 11.Turisme
 *****
 
-## Selecció de les dades d’interès a analitzar
+## Selecció de les dades d’interès a analitzar
 
 ```{r message= FALSE, warning=FALSE}
 # Seleccionem les columnes que ens interessen
